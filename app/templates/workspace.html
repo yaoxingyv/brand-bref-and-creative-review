@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}工作台 · {{ app_name }}{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="brand">{{ app_name }}</div>
+  <div>
+    <span id="who" class="muted"></span>
+    <button onclick="location.href='/admin'" style="margin-left:10px;">管理后台</button>
+    <button onclick="logout()" style="margin-left:6px;">退出</button>
+  </div>
+</div>
+
+<div style="max-width:1100px;margin:0 auto;padding:20px;">
+  <div class="err" id="err"></div>
+
+  <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;">
+    <!-- 左：简报列表 -->
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:10px;">品牌创意简报</div>
+      <div id="briefList" class="muted">加载中…</div>
+    </div>
+
+    <!-- 右：详情 -->
+    <div>
+      <div class="card" id="detailCard" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div id="bTitle" style="font-weight:600;font-size:15px;"></div>
+            <div id="bNo" class="muted" style="font-size:12px;"></div>
+          </div>
+          <span class="tag" id="bStatus"></span>
+        </div>
+
+        <!-- 约束进度：验收看板 -->
+        <div style="margin-top:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+            <span>30 项品牌约束确认进度</span>
+            <span id="progressText" class="muted"></span>
+          </div>
+          <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;">
+            <div id="progressBar" style="height:100%;background:var(--primary);width:0;"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button class="primary" onclick="runCheck()">校验并生成缺项清单</button>
+          <button onclick="loadDetail(curId)">刷新</button>
+        </div>
+      </div>
+
+      <!-- 缺项清单：一页纸 -->
+      <div class="card" id="gapCard" style="display:none;margin-top:16px;">
+        <div style="font-weight:600;margin-bottom:4px;">缺项清单</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px;">
+          每行 = 缺什么 + 去哪儿找（林亦舟 f15 要的就是这个，不要泛化摘要）
+        </div>
+        <table id="gapTable"></table>
+      </div>
+
+      <!-- 30 项约束明细 -->
+      <div class="card" id="csCard" style="display:none;margin-top:16px;">
+        <div style="font-weight:600;margin-bottom:10px;">品牌约束条目</div>
+        <div style="max-height:320px;overflow:auto;">
+          <table id="csTable"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "{{ api_prefix }}";
+let curId = null;
+
+function authHeader(){ return {'Authorization':'Bearer '+localStorage.token, 'Content-Type':'application/json'}; }
+
+function logout(){ localStorage.clear(); location.href='/login'; }
+
+async function api(path, opts={}){
+  const r = await fetch(API + path, Object.assign({headers: authHeader()}, opts));
+  if(r.status === 401){ location.href='/login'; return null; }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){
+    const msg = j.detail ? (j.detail.message || j.detail) : ('错误 ' + r.status);
+    document.getElementById('err').textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
+    return null;
+  }
+  document.getElementById('err').textContent = '';
+  return j;
+}
+
+async function boot(){
+  const me = JSON.parse(localStorage.me || '{}');
+  document.getElementById('who').textContent = `${me.full_name || ''}（${me.username || ''}）`;
+  const list = await api('/briefs');
+  if(!list) return;
+  const box = document.getElementById('briefList');
+  if(!list.length){ box.textContent = '暂无简报'; return; }
+  box.innerHTML = list.map(b => `
+    <div onclick="pick(${b.id})" style="padding:8px 6px;border-radius:6px;cursor:pointer;border-bottom:1px solid var(--line);">
+      <div style="font-size:13px;">${b.title}</div>
+      <div class="muted" style="font-size:12px;">${b.brief_no} · ${b.status}</div>
+    </div>`).join('');
+  pick(list[0].id);
+}
+
+async function pick(id){
+  curId = id;
+  document.getElementById('detailCard').style.display = 'block';
+  await loadDetail(id);
+  await loadConstraints(id);
+}
+
+async function loadDetail(id){
+  const b = await api('/briefs/' + id);
+  if(!b) return;
+  document.getElementById('bTitle').textContent = b.title;
+  document.getElementById('bNo').textContent = `${b.brief_no} · 当前版本 v${b.current_version}`;
+  document.getElementById('bStatus').textContent = b.status;
+}
+
+async function loadConstraints(id){
+  const d = await api('/briefs/' + id + '/constraints');
+  if(!d) return;
+  const pct = d.total ? Math.round(d.confirmed / d.total * 100) : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${d.confirmed}/${d.total} 已确认（${pct}%）`;
+  document.getElementById('csCard').style.display = 'block';
+
+  const color = s => s==='confirmed' ? 'var(--ok)' : (s==='unconfirmed' ? '#d97706' : 'var(--muted)');
+  const label = s => s==='confirmed' ? '已确认' : (s==='unconfirmed' ? '待确认' : '缺失');
+  document.getElementById('csTable').innerHTML = `
+    <tr><th style="width:44px;">#</th><th>约束内容</th><th style="width:150px;">来源位置</th><th style="width:70px;">状态</th></tr>` +
+    d.items.map(i => `<tr>
+      <td>${i.seq}</td>
+      <td>${i.content || '<span class="muted">（未录入）</span>'}</td>
+      <td class="muted" style="font-size:12px;">${i.source_location || '-'}</td>
+      <td style="color:${color(i.status)};">${label(i.status)}</td>
+    </tr>`).join('');
+}
+
+async function runCheck(){
+  const d = await api('/briefs/' + curId + '/check', {method:'POST'});
+  if(!d) return;
+  document.getElementById('gapCard').style.display = 'block';
+
+  const rows = [...d.field_gaps, ...d.constraint_gaps];
+  const sevColor = s => s==='high' ? 'var(--danger)' : (s==='medium' ? '#d97706' : 'var(--muted)');
+  const sevLabel = s => s==='high' ? '要紧' : (s==='medium' ? '一般' : '轻微');
+
+  document.getElementById('gapTable').innerHTML = `
+    <tr><th style="width:60px;">程度</th><th>缺什么</th><th>去哪儿找</th></tr>` +
+    (rows.length ? rows.map(g => `<tr>
+      <td style="color:${sevColor(g.severity)};">${sevLabel(g.severity)}</td>
+      <td>${g.gap}</td>
+      <td class="muted" style="font-size:12px;">${g.source}</td>
+    </tr>`).join('')
+      : '<tr><td colspan="3" class="muted">没有缺项，全部齐了</td></tr>');
+
+  await loadConstraints(curId);
+}
+
+if(!localStorage.token){ location.href='/login'; } else { boot(); }
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ app_name }}{% endblock %}</title>
+<style>
+  /* 极简：白底 + 细边框 + 单一主色，去掉一切装饰 */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#f7f8fa; --panel:#fff; --line:#e5e7eb; --text:#1f2328;
+    --muted:#6b7280; --primary:#2563eb; --soft:#eff6ff;
+    --danger:#dc2626; --ok:#16a34a; --r:8px;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;}
+  a{color:var(--primary);text-decoration:none;}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);
+         color:var(--text);padding:6px 14px;border-radius:var(--r);transition:.15s;}
+  button:hover{border-color:var(--primary);color:var(--primary);}
+  button.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  button.primary:hover{opacity:.9;color:#fff;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  input,textarea,select{font:inherit;width:100%;padding:8px 10px;border:1px solid var(--line);
+    border-radius:var(--r);background:var(--panel);color:var(--text);outline:none;}
+  input:focus,textarea:focus{border-color:var(--primary);}
+  table{width:100%;border-collapse:collapse;background:var(--panel);}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;}
+  th{color:var(--muted);font-weight:500;}
+  .topbar{height:52px;background:var(--panel);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;padding:0 20px;
+    position:sticky;top:0;z-index:10;}
+  .brand{font-weight:600;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;}
+  .muted{color:var(--muted);font-size:13px;}
+  .tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;
+    background:var(--soft);color:var(--primary);}
+  .tag.gray{background:#f3f4f6;color:var(--muted);}
+  .err{color:var(--danger);font-size:13px;min-height:20px;}
+</style>
+</head>
+<body>
+{% block body %}{% endblock %}
+</body>
+</html>

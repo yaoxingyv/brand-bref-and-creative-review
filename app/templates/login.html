@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}登录 · {{ app_name }}{% endblock %}
+{% block body %}
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+  <div class="card" style="width:380px;">
+    <div style="font-size:18px;font-weight:600;margin-bottom:4px;">{{ app_name }}</div>
+    <div class="muted" style="margin-bottom:18px;">试点版 · 请先登录</div>
+
+    <div style="margin-bottom:10px;">
+      <div class="muted" style="margin-bottom:4px;">用户名</div>
+      <input id="username" placeholder="如 guminglan" autocomplete="off">
+    </div>
+    <div style="margin-bottom:12px;">
+      <div class="muted" style="margin-bottom:4px;">密码</div>
+      <input id="password" type="password" placeholder="pilot2026" autocomplete="off">
+    </div>
+
+    <div class="err" id="err"></div>
+    <button class="primary" style="width:100%;" onclick="doLogin()">登录</button>
+
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);">
+      <div class="muted" style="margin-bottom:8px;">演示账号（密码统一 pilot2026）</div>
+      <table style="font-size:12px;">
+        <tr><td>guminglan</td><td>顾明岚</td><td class="muted">业务决策 · 可确认</td></tr>
+        <tr><td>tangyingqiu</td><td>唐映秋</td><td class="muted">流程协调</td></tr>
+        <tr><td>linyizhou</td><td>林亦舟</td><td class="muted">设计执行</td></tr>
+        <tr><td>fujing</td><td>傅景</td><td class="muted">审核质量 · 可终审</td></tr>
+        <tr><td>qinrui</td><td>秦芮</td><td class="muted">工具与数据</td></tr>
+        <tr><td>yeshu</td><td>叶书</td><td class="muted">客户协同</td></tr>
+        <tr><td>admin</td><td>系统管理员</td><td class="muted">全部权限</td></tr>
+      </table>
+      <div class="muted" style="margin-top:8px;font-size:12px;">
+        想验证"非授权人不能确认"：用 linyizhou 登录，在简报详情点确认会被拦下。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "{{ api_prefix }}";
+function doLogin(){
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  document.getElementById('err').textContent = '';
+  fetch(API + '/auth/login', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:u, password:p})
+  }).then(r => r.json().then(j => ({ok:r.ok, j})))
+    .then(({ok, j}) => {
+      if(!ok){ document.getElementById('err').textContent = j.detail || '登录失败'; return; }
+      localStorage.token = j.access_token;
+      localStorage.me = JSON.stringify(j.user);
+      location.href = '/';
+    })
+    .catch(() => { document.getElementById('err').textContent = '网络错误，请确认服务已启动'; });
+}
+document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+</script>
+{% endblock %}

@@ -1,0 +1,28 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---------- 环境与密钥 ----------
+.env
+.env.local
+
+# ---------- 运行时数据（向量索引 / 数据库 / 上传文件）----------
+data/
+*.db
+*.sqlite3
+
+# ---------- 测试与工具 ----------
+.pytest_cache/
+.coverage
+htmlcov/
+_compile.log
+_pip*.log
+_*.txt
+
+# ---------- 编辑器 ----------
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}管理后台 · {{ app_name }}{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="brand">管理后台 · {{ app_name }}</div>
+  <div>
+    <span id="who" class="muted"></span>
+    <button onclick="location.href='/'" style="margin-left:10px;">去工作台</button>
+    <button onclick="logout()" style="margin-left:6px;">退出</button>
+  </div>
+</div>
+
+<div style="max-width:1100px;margin:0 auto;padding:20px;">
+  <div class="err" id="err"></div>
+
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+    <button onclick="tab('dash')">概览</button>
+    <button onclick="tab('queue')">人工队列</button>
+    <button onclick="tab('audit')">审计留痕</button>
+    <button onclick="tab('violation')">硬约束拦截</button>
+    <button onclick="tab('asset')">素材授权</button>
+    <button onclick="tab('approver')">授权名单</button>
+    <button onclick="tab('user')">用户</button>
+    <button onclick="tab('rule')">七条硬约束</button>
+    <button onclick="tab('table')">数据模型</button>
+  </div>
+
+  <div class="card" id="panel"></div>
+</div>
+
+<script>
+const API = "{{ api_prefix }}";
+function authHeader(){ return {'Authorization':'Bearer '+localStorage.token, 'Content-Type':'application/json'}; }
+function logout(){ localStorage.clear(); location.href='/login'; }
+
+async function api(path, opts={}){
+  const r = await fetch(API + path, Object.assign({headers: authHeader()}, opts));
+  if(r.status === 401){ location.href='/login'; return null; }
+  if(r.status === 403){
+    document.getElementById('err').textContent = '当前角色无权访问：' + ((await r.json().catch(()=>({}))).detail || '');
+    return null;
+  }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ document.getElementById('err').textContent = '错误 ' + r.status; return null; }
+  document.getElementById('err').textContent = '';
+  return j;
+}
+
+function table(headers, rows){
+  return `<table><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+}
+
+async function tab(name){
+  const p = document.getElementById('panel');
+  p.innerHTML = '<span class="muted">加载中…</span>';
+
+  if(name === 'dash'){
+    const d = await api('/admin/dashboard');
+    if(!d) return;
+    const c = d.constraints;
+    pct = c.target ? Math.round(c.confirmed / c.target * 100) : 0;
+    p.innerHTML = `
+      <div style="font-weight:600;margin-bottom:12px;">试点概览</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+        <div class="card"><div class="muted" style="font-size:12px;">简报数</div><div style="font-size:22px;">${d.briefs}</div></div>
+        <div class="card"><div class="muted" style="font-size:12px;">约束已确认</div><div style="font-size:22px;">${c.confirmed}/${c.target}</div></div>
+        <div class="card"><div class="muted" style="font-size:12px;">待处理队列</div><div style="font-size:22px;">${d.pending_queue}</div></div>
+        <div class="card"><div class="muted" style="font-size:12px;">硬约束拦截次数</div><div style="font-size:22px;color:var(--danger);">${d.violations}</div></div>
+      </div>
+      <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;">
+        <div style="height:100%;background:var(--primary);width:${pct}%;"></div>
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:12px;">
+        验收口径：30 项品牌约束全部追溯到客户确认（f02 / f42）。当前 ${pct}%。
+      </div>`;
+  }
+
+  if(name === 'queue'){
+    const d = await api('/approvals/queue');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:10px;">人工处理队列（f44）</div>` +
+      (d.length ? table(['ID','简报','原因','说明','接收人','状态'],
+        d.map(i => [i.id, i.brief_id, i.reason_code, i.reason_detail, i.assignee || '<span class="muted">未指派</span>', i.status]))
+        : '<span class="muted">队列为空</span>');
+  }
+
+  if(name === 'audit'){
+    const d = await api('/admin/audit-logs?limit=100');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">审计留痕</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">谁查过、用哪个版本、提了什么建议、谁确认（f45）</div>` +
+      table(['时间','操作人','动作','对象','版本','细节','规则码'],
+        d.map(l => [l.created_at.slice(5,19), l.actor || '-', l.action, l.target_type, l.version_no ?? '-',
+                    JSON.stringify(l.detail).slice(0,80), l.rule_code || '-']));
+  }
+
+  if(name === 'violation'){
+    const d = await api('/admin/violations');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">硬约束拦截记录</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">谁试图越界，同样是审计要的证据</div>` +
+      (d.length ? table(['时间','规则码','操作人','简报','细节'],
+        d.map(l => [l.created_at.slice(5,19), `<span style="color:var(--danger);">${l.rule_code}</span>`,
+                    l.actor || '-', l.brief_id ?? '-', JSON.stringify(l.detail).slice(0,90)]))
+        : '<span class="muted">暂无拦截记录</span>');
+  }
+
+  if(name === 'asset'){
+    const d = await api('/admin/assets');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">素材授权标记</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">未授权明确标记（f02）；停用但仍有引用要告警（f11）</div>` +
+      table(['素材','授权','停用','引用位置','告警'],
+        d.map(a => [a.name,
+          a.authorized ? '<span style="color:var(--ok);">已授权</span>' : '<span style="color:var(--danger);">未授权</span>',
+          a.deprecated ? '是' : '-',
+          (a.used_in||[]).join('、') || '-',
+          a.warning ? '<span style="color:var(--danger);">停用仍被引用</span>' : '-']));
+  }
+
+  if(name === 'approver'){
+    const d = await api('/approvals/approvers');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">授权确认人名单</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">
+        试点阶段名单尚未经客户书面确认 —— 这是待确认项，不是既成事实
+      </div>` +
+      table(['姓名','账号','角色','可确认范围','有效期至','说明'],
+        d.map(a => [a.full_name, a.username, a.role, a.scope, a.valid_until || '长期', a.note]));
+  }
+
+  if(name === 'user'){
+    const d = await api('/admin/users');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:10px;">用户（六位负责人）</div>` +
+      table(['ID','账号','姓名','角色','状态'],
+        d.map(u => [u.id, u.username, u.full_name, u.role, u.is_active ? '启用' : '停用']));
+  }
+
+  if(name === 'rule'){
+    const d = await api('/approvals/hard-rules');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">七条硬约束</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">
+        写死在代码常量里，不提供任何配置开关 —— 红线可以被配置关掉就等于没有
+      </div>` +
+      table(['编号','约束','事实依据','实现方式','越界拦截'],
+        d.map(r => [`<code>${r.code}</code>`, r.name, r.basis, r.impl, r.block]));
+  }
+
+  if(name === 'table'){
+    const d = await api('/admin/tables');
+    if(!d) return;
+    p.innerHTML = `<div style="font-weight:600;margin-bottom:10px;">数据模型自检</div>` +
+      table(['数据表','行数'], d.map(t => [t.table, t.rows]));
+  }
+}
+
+if(!localStorage.token){ location.href='/login'; }
+else {
+  const me = JSON.parse(localStorage.me || '{}');
+  document.getElementById('who').textContent = `${me.full_name || ''}（${me.username || ''}）`;
+  tab('dash');
+}
+</script>
+{% endblock %}
